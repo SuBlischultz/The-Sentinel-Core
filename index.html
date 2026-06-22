@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentinel Core Architecture</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* Palette tailored for video contrast */
+            --bg-color: #0d1117;
+            --box-bg: #161b22;
+            --box-border: #30363d;
+            --text-main: #c9d1d9;
+            --text-muted: #8b949e;
+            
+            --color-danger: #f85149;
+            --bg-danger: #3a1d1e;
+            
+            --color-safe: #2ea043;
+            --bg-safe: #122b19;
+            
+            --color-sentinel: #58a6ff;
+            --bg-sentinel: #111f38;
+            
+            --font-sans: 'Inter', sans-serif;
+            --font-mono: 'Google Sans Mono', monospace;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: var(--font-sans);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        svg {
+            width: 100%;
+            max-width: 1100px;
+            max-height: 70vh;
+            filter: drop-shadow(0 10px 30px rgba(0,0,0,0.5));
+        }
+
+        .box {
+            fill: var(--box-bg);
+            stroke: var(--box-border);
+            stroke-width: 2;
+            transition: all 0.4s ease;
+            rx: 6px; /* Rounded corners */
+        }
+
+        .text-title {
+            fill: #ffffff;
+            font-family: var(--font-mono);
+            font-size: 16px;
+            font-weight: 600;
+            text-anchor: middle;
+            transition: fill 0.4s ease;
+        }
+
+        .text-sub {
+            fill: var(--text-muted);
+            font-family: var(--font-sans);
+            font-size: 12px;
+            text-anchor: middle;
+        }
+
+        .line {
+            fill: none;
+            stroke: var(--box-border);
+            stroke-width: 3;
+            transition: stroke 0.4s ease;
+        }
+
+        .line-label {
+            fill: var(--text-muted);
+            font-family: var(--font-sans);
+            font-size: 11px;
+            font-weight: 500;
+            text-anchor: middle;
+            background: var(--bg-color);
+        }
+
+        /* States */
+        .hacked .box { fill: var(--bg-danger); stroke: var(--color-danger); }
+        .hacked .text-title { fill: var(--color-danger); }
+        .hacked-line { stroke: var(--color-danger); }
+        
+        .sentinel .box { fill: var(--bg-sentinel); stroke: var(--color-sentinel); }
+        .sentinel .text-title { fill: var(--color-sentinel); }
+        
+        .active-safe .box { fill: var(--bg-safe); stroke: var(--color-safe); }
+        .active-safe .text-title { fill: var(--color-safe); }
+
+        .hidden-element {
+            opacity: 0.05;
+            pointer-events: none;
+            transition: opacity 0.5s ease;
+        }
+        
+        .visible-element {
+            opacity: 1;
+        }
+
+        @keyframes dashFlow {
+            from { stroke-dashoffset: 24; }
+            to { stroke-dashoffset: 0; }
+        }
+
+        .flow-line {
+            fill: none;
+            stroke-width: 3;
+            stroke-dasharray: 6 6;
+            animation: dashFlow 0.5s linear infinite;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .flow-danger { stroke: var(--color-danger); opacity: 1; }
+        .flow-safe { stroke: var(--color-safe); opacity: 1; }
+        .flow-sentinel { stroke: var(--color-sentinel); opacity: 1; }
+
+        /* Controls UI */
+        .controls {
+            margin-top: 2rem;
+            display: flex;
+            gap: 1rem;
+            background: #161b22;
+            padding: 1rem 2rem;
+            border-radius: 12px;
+            border: 1px solid #30363d;
+        }
+
+        button {
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-family: var(--font-mono);
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+        }
+
+        .btn-toggle { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
+        .btn-toggle:hover { background: #30363d; }
+        
+        .btn-attack { background: #da3633; color: white; }
+        .btn-attack:hover { background: #b62324; }
+        
+        .btn-recover { background: #238636; color: white; }
+        .btn-recover:hover { background: #2ea043; }
+
+        .btn-deorbit { background: #1f6feb; color: white; }
+        .btn-deorbit:hover { background: #388bfd; }
+
+        button:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    </style>
+</head>
+<body>
+
+    <svg viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet" id="architecture-diagram">
+        <defs>
+            <!-- Arrowheads -->
+            <marker id="arrow-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#30363d" />
+            </marker>
+            <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#f85149" />
+            </marker>
+            <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#2ea043" />
+            </marker>
+            <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#58a6ff" />
+            </marker>
+            
+            <!-- Label Backgrounds -->
+            <filter id="bg-text" x="-10%" y="-10%" width="120%" height="120%">
+                <feFlood flood-color="#0d1117" />
+                <feComposite in="SourceGraphic" />
+            </filter>
+        </defs>
+
+        <!-- SATELLITE BUS BOUNDARY -->
+        <rect x="50" y="50" width="900" height="500" fill="none" stroke="#30363d" stroke-width="2" stroke-dasharray="8 8" rx="12" />
+        <text x="70" y="80" fill="#8b949e" font-family="var(--font-mono)" font-size="14" font-weight="600" letter-spacing="2">SATELLITE BUS BOUNDARY</text>
+
+        <!-- AIR GAP DIVIDER (Sentinel Mode Only) -->
+        <g id="air-gap" class="hidden-element">
+            <line x1="600" y1="50" x2="600" y2="550" stroke="#58a6ff" stroke-width="2" stroke-dasharray="10 10" />
+            <rect x="520" y="65" width="160" height="24" fill="#0d1117" />
+            <text x="600" y="80" fill="#58a6ff" font-family="var(--font-mono)" font-size="12" font-weight="600" text-anchor="middle">PHYSICAL AIR-GAP</text>
+        </g>
+
+        <!-- ========================================== -->
+        <!-- LEFT SIDE: MONOLITHIC COMPONENTS           -->
+        <!-- ========================================== -->
+        
+        <!-- Paths (Drawn first so they are behind boxes) -->
+        <g id="mono-paths">
+            <!-- Comms to MFC -->
+            <path id="path-comms-mfc" class="line" d="M 325 180 L 325 250" marker-end="url(#arrow-gray)" />
+            <path id="flow-comms-mfc" class="flow-line" d="M 325 180 L 325 250" />
+            <text x="325" y="220" class="line-label" filter="url(#bg-text)">Data & Command</text>
+
+            <!-- MFC to Payload -->
+            <path id="path-mfc-payload" class="line" d="M 275 350 L 275 390 L 200 390 L 200 420" marker-end="url(#arrow-gray)" />
+            <path id="flow-mfc-payload" class="flow-line" d="M 275 350 L 275 390 L 200 390 L 200 420" />
+
+            <!-- MFC to Thrusters -->
+            <path id="path-mfc-thrust" class="line" d="M 375 350 L 375 390 L 450 390 L 450 420" marker-end="url(#arrow-gray)" />
+            <path id="flow-mfc-thrust" class="flow-line" d="M 375 350 L 375 390 L 450 390 L 450 420" />
+            
+            <text x="325" y="393" class="line-label" filter="url(#bg-text)">Sub-System Control</text>
+        </g>
+
+        <!-- Boxes -->
+        <g id="comp-mfc">
+            <rect x="225" y="250" width="200" height="100" class="box" />
+            <text x="325" y="295" class="text-title">MAIN FLIGHT</text>
+            <text x="325" y="315" class="text-title">COMPUTER</text>
+            <text x="325" y="335" class="text-sub">(Single Point of Failure)</text>
+        </g>
+
+        <g id="comp-comms">
+            <rect x="225" y="120" width="200" height="60" class="box" />
+            <text x="325" y="150" class="text-title">PRIMARY COMMS</text>
+            <text x="325" y="168" class="text-sub">High-Bandwidth Link</text>
+        </g>
+
+        <g id="comp-payload">
+            <rect x="100" y="420" width="200" height="60" class="box" />
+            <text x="200" y="450" class="text-title">MISSION PAYLOAD</text>
+            <text x="200" y="468" class="text-sub">Sensors / Cameras</text>
+        </g>
+
+        <g id="comp-thrust">
+            <rect x="350" y="420" width="200" height="60" class="box" />
+            <text x="450" y="450" class="text-title">THRUSTERS</text>
+            <text x="450" y="468" class="text-sub">Station-Keeping</text>
+        </g>
+
+        <!-- ========================================== -->
+        <!-- RIGHT SIDE: SENTINEL CORE COMPONENTS       -->
+        <!-- ========================================== -->
+        
+        <g id="sentinel-layer" class="hidden-element">
+            <!-- Sentinel Paths -->
+            <!-- UHF to Sentinel -->
+            <path id="path-uhf-sentinel" class="line sentinel" d="M 800 180 L 800 250" marker-end="url(#arrow-blue)" />
+            <path id="flow-uhf-sentinel" class="flow-line" d="M 800 180 L 800 250" />
+            <text x="800" y="220" class="line-label" filter="url(#bg-text)">Zero-Trust Command</text>
+
+            <!-- Sentinel to Drag Sail -->
+            <path id="path-sentinel-sail" class="line sentinel" d="M 800 350 L 800 420" marker-end="url(#arrow-blue)" />
+            <path id="flow-sentinel-sail" class="flow-line" d="M 800 350 L 800 420" />
+            <text x="800" y="390" class="line-label" filter="url(#bg-text)">Mechanical Deploy</text>
+
+            <!-- Sentinel to Hard Reset -->
+            <path id="path-sentinel-reset" class="line sentinel" d="M 700 300 L 650 300" marker-end="url(#arrow-blue)" />
+            <path id="flow-sentinel-reset" class="flow-line" d="M 700 300 L 650 300" />
+            
+            <!-- Hard Reset to MFC -->
+            <path id="path-reset-mfc" class="line" d="M 550 300 L 425 300" marker-end="url(#arrow-gray)" />
+            <path id="flow-reset-mfc" class="flow-line" d="M 550 300 L 425 300" />
+            <text x="487" y="290" class="line-label" filter="url(#bg-text)">Force Reboot</text>
+
+            <!-- Sentinel Boxes -->
+            <g id="comp-sentinel" class="sentinel">
+                <rect x="700" y="250" width="200" height="100" class="box" />
+                <text x="800" y="295" class="text-title">SENTINEL CORE</text>
+                <text x="800" y="315" class="text-sub">Independent Micro-Controller</text>
+                <text x="800" y="335" class="text-sub">(Fail-Safe Logic)</text>
+            </g>
+
+            <g id="comp-uhf" class="sentinel">
+                <rect x="700" y="120" width="200" height="60" class="box" />
+                <text x="800" y="150" class="text-title">SECURE UHF LINK</text>
+                <text x="800" y="168" class="text-sub">Out-of-Band Antenna</text>
+            </g>
+
+            <g id="comp-sail" class="sentinel">
+                <rect x="700" y="420" width="200" height="60" class="box" />
+                <text x="800" y="450" class="text-title">DRAG SAIL</text>
+                <text x="800" y="468" class="text-sub">Passive De-Orbit Device</text>
+            </g>
+
+            <g id="comp-reset">
+                <rect x="550" y="280" width="100" height="40" class="box" />
+                <text x="600" y="304" class="text-title" style="font-size: 12px;">HARD RESET</text>
+            </g>
+        </g>
+
+    </svg>
+
+    <!-- Controls Interface -->
+    <div class="controls">
+        <button id="btn-toggle" class="btn-toggle">View: Monolithic</button>
+        <div style="width: 1px; background: #30363d; margin: 0 10px;"></div>
+        <button id="btn-attack" class="btn-attack">1. Simulate Cyber Attack</button>
+        <button id="btn-recover" class="btn-recover" disabled>2. Execute Hard Reboot</button>
+        <button id="btn-deorbit" class="btn-deorbit" disabled>3. Deploy Drag Sail</button>
+        <button id="btn-reset" class="btn-toggle" style="margin-left: auto;">Reset</button>
+    </div>
+
+    <script>
+        // State Management
+        let isSentinelMode = false;
+        let isHacked = false;
+        let isRecovered = false;
+
+        // Elements
+        const elToggle = document.getElementById('btn-toggle');
+        const elAttack = document.getElementById('btn-attack');
+        const elRecover = document.getElementById('btn-recover');
+        const elDeorbit = document.getElementById('btn-deorbit');
+        const elReset = document.getElementById('btn-reset');
+
+        const layerSentinel = document.getElementById('sentinel-layer');
+        const airGap = document.getElementById('air-gap');
+
+        const monoComps = [
+            document.getElementById('comp-mfc'),
+            document.getElementById('comp-comms'),
+            document.getElementById('comp-payload'),
+            document.getElementById('comp-thrust')
+        ];
+        const monoPaths = [
+            document.getElementById('path-comms-mfc'),
+            document.getElementById('path-mfc-payload'),
+            document.getElementById('path-mfc-thrust')
+        ];
+        const monoFlows = [
+            document.getElementById('flow-comms-mfc'),
+            document.getElementById('flow-mfc-payload'),
+            document.getElementById('flow-mfc-thrust')
+        ];
+
+        // Toggle Architecture Mode
+        elToggle.addEventListener('click', () => {
+            isSentinelMode = !isSentinelMode;
+            if (isSentinelMode) {
+                elToggle.innerText = "View: Sentinel Core";
+                layerSentinel.classList.replace('hidden-element', 'visible-element');
+                airGap.classList.replace('hidden-element', 'visible-element');
+                
+                document.getElementById('comp-mfc').querySelector('.text-sub').textContent = "Protected by Sentinel";
+                
+                if (isHacked) {
+                    elRecover.disabled = false;
+                    elDeorbit.disabled = false;
+                }
+            } else {
+                elToggle.innerText = "View: Monolithic";
+                layerSentinel.classList.replace('visible-element', 'hidden-element');
+                airGap.classList.replace('visible-element', 'hidden-element');
+                
+                document.getElementById('comp-mfc').querySelector('.text-sub').textContent = "(Single Point of Failure)";
+                
+                elRecover.disabled = true;
+                elDeorbit.disabled = true;
+            }
+        });
+
+        // 1. Simulate Cyber Attack
+        elAttack.addEventListener('click', () => {
+            if (isRecovered) return;
+            isHacked = true;
+            
+            // Turn all monolithic components red
+            monoComps.forEach(c => c.classList.add('hacked'));
+            monoPaths.forEach(p => {
+                p.classList.add('hacked-line');
+                p.setAttribute('marker-end', 'url(#arrow-red)');
+            });
+            
+            // Show red data flow to indicate spreading malware
+            monoFlows.forEach(f => f.classList.add('flow-danger'));
+
+            if (isSentinelMode) {
+                elRecover.disabled = false;
+                elDeorbit.disabled = false;
+            }
+        });
+
+        // 2. Execute Hard Reboot (Sentinel Action)
+        elRecover.addEventListener('click', () => {
+            if (!isHacked || !isSentinelMode) return;
+            
+            // Step A: Signal comes in via UHF
+            document.getElementById('flow-uhf-sentinel').classList.add('flow-sentinel');
+            
+            setTimeout(() => {
+                // Step B: Sentinel sends reboot pulse
+                document.getElementById('flow-sentinel-reset').classList.add('flow-sentinel');
+                document.getElementById('flow-reset-mfc').classList.add('flow-safe');
+                document.getElementById('comp-reset').classList.add('active-safe');
+                
+                setTimeout(() => {
+                    // Step C: MFC Reboots and clears malware
+                    monoComps.forEach(c => c.classList.remove('hacked'));
+                    monoPaths.forEach(p => {
+                        p.classList.remove('hacked-line');
+                        p.setAttribute('marker-end', 'url(#arrow-gray)');
+                    });
+                    monoFlows.forEach(f => f.classList.remove('flow-danger'));
+                    
+                    document.getElementById('comp-mfc').classList.add('active-safe');
+                    
+                    isHacked = false;
+                    isRecovered = true;
+                    elRecover.disabled = true;
+                    elDeorbit.disabled = true;
+
+                    // Clean up flows after a few seconds
+                    setTimeout(() => {
+                        document.getElementById('flow-uhf-sentinel').classList.remove('flow-sentinel');
+                        document.getElementById('flow-sentinel-reset').classList.remove('flow-sentinel');
+                        document.getElementById('flow-reset-mfc').classList.remove('flow-safe');
+                        document.getElementById('comp-reset').classList.remove('active-safe');
+                        document.getElementById('comp-mfc').classList.remove('active-safe');
+                    }, 2000);
+
+                }, 800);
+            }, 600);
+        });
+
+        // 3. Deploy Drag Sail (Sentinel Action)
+        elDeorbit.addEventListener('click', () => {
+            if (!isHacked || !isSentinelMode) return;
+
+            // Step A: Signal comes in via UHF
+            document.getElementById('flow-uhf-sentinel').classList.add('flow-sentinel');
+            
+            setTimeout(() => {
+                // Step B: Sentinel sends deploy pulse
+                document.getElementById('flow-sentinel-sail').classList.add('flow-sentinel');
+                
+                setTimeout(() => {
+                    // Step C: Sail deploys (turns green)
+                    const sail = document.getElementById('comp-sail');
+                    sail.classList.remove('sentinel');
+                    sail.classList.add('active-safe');
+                    sail.querySelector('.text-title').textContent = "SAIL DEPLOYED";
+                    sail.querySelector('.text-sub').textContent = "De-Orbiting Asset...";
+                    
+                    isRecovered = true;
+                    elRecover.disabled = true;
+                    elDeorbit.disabled = true;
+                }, 800);
+            }, 600);
+        });
+
+        // Reset Everything
+        elReset.addEventListener('click', () => {
+            isHacked = false;
+            isRecovered = false;
+
+            // Remove all custom classes
+            monoComps.forEach(c => c.classList.remove('hacked', 'active-safe'));
+            monoPaths.forEach(p => {
+                p.classList.remove('hacked-line');
+                p.setAttribute('marker-end', 'url(#arrow-gray)');
+            });
+            monoFlows.forEach(f => f.classList.remove('flow-danger'));
+            
+            document.getElementById('flow-uhf-sentinel').classList.remove('flow-sentinel');
+            document.getElementById('flow-sentinel-reset').classList.remove('flow-sentinel');
+            document.getElementById('flow-reset-mfc').classList.remove('flow-safe');
+            document.getElementById('flow-sentinel-sail').classList.remove('flow-sentinel');
+            document.getElementById('comp-reset').classList.remove('active-safe');
+            
+            const sail = document.getElementById('comp-sail');
+            sail.classList.remove('active-safe');
+            sail.classList.add('sentinel');
+            sail.querySelector('.text-title').textContent = "DRAG SAIL";
+            sail.querySelector('.text-sub').textContent = "Passive De-Orbit Device";
+
+            if (isSentinelMode) {
+                elRecover.disabled = true;
+                elDeorbit.disabled = true;
+            }
+        });
+
+    </script>
+</body>
+</html>
